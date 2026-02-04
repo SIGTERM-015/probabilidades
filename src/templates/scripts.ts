@@ -337,6 +337,8 @@ export const getClientScript = (joinCode?: string) => `
     playerName = name;
     roomCode = generateRoomCode();
     isChallenger = true;
+    
+    saveUsername(name);
 
     connectingBtn = 'create-room-btn';
     setButtonLoading('create-room-btn', true);
@@ -366,6 +368,8 @@ export const getClientScript = (joinCode?: string) => `
     playerName = name;
     roomCode = code;
     isChallenger = false;
+    
+    saveUsername(name);
 
     connectingBtn = 'join-room-btn';
     setButtonLoading('join-room-btn', true);
@@ -534,10 +538,28 @@ export const getClientScript = (joinCode?: string) => `
     window.location.href = '/';
   }
 
+  // Load saved username
+  function loadSavedUsername() {
+    const savedName = localStorage.getItem('probabilidades_username');
+    if (savedName) {
+      document.getElementById('creator-name').value = savedName;
+      document.getElementById('joiner-name').value = savedName;
+    }
+  }
+
+  function saveUsername(name) {
+    if (name) {
+      localStorage.setItem('probabilidades_username', name);
+    }
+  }
+
   // Check for direct join link
   const joinCodeFromUrl = '${joinCode || ''}';
   if (joinCodeFromUrl) {
     document.getElementById('room-code-input').value = joinCodeFromUrl;
     showJoinRoom();
   }
+
+  // Load saved username on page load
+  loadSavedUsername();
 `

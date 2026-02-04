@@ -22,10 +22,13 @@ export const getClientScript = (joinCode?: string) => `
     document.getElementById(screenId).classList.remove('hidden');
   }
 
-  function goHome() {
+  function goHome(clearSessionData = false) {
     if (ws) {
       ws.close();
       ws = null;
+    }
+    if (clearSessionData) {
+      clearSession();
     }
     showScreen('home-screen');
   }
@@ -109,6 +112,7 @@ export const getClientScript = (joinCode?: string) => `
     switch (data.type) {
       case 'room_created':
         clearLoadingButtons();
+        saveSession();
         showScreen('waiting-screen');
         document.getElementById('display-room-code').textContent = gameState.roomCode;
         document.getElementById('display-challenge').textContent = '"' + gameState.challenge + '"';
@@ -116,8 +120,42 @@ export const getClientScript = (joinCode?: string) => `
 
       case 'player_joined':
         clearLoadingButtons();
+        saveSession();
         updateMaxNumberScreen();
         showScreen('max-number-screen');
+        break;
+
+      case 'reconnected':
+        clearLoadingButtons();
+        // Recalculate isChallenger from server state
+        isChallenger = playerName === gameState.challenger?.name;
+        showToast('¡Reconectado!');
+        // Restore state based on game phase
+        if (gameState.phase === 'waiting') {
+          showScreen('waiting-screen');
+          document.getElementById('display-room-code').textContent = gameState.roomCode;
+          document.getElementById('display-challenge').textContent = '"' + gameState.challenge + '"';
+        } else if (gameState.phase === 'setting_max') {
+          updateMaxNumberScreen();
+          showScreen('max-number-screen');
+        } else if (gameState.phase === 'choosing') {
+          updateChooseScreen(true);
+          showScreen('choose-screen');
+        } else if (gameState.phase === 'reveal') {
+          showResultScreen();
+        }
+        break;
+
+      case 'room_not_found':
+        clearLoadingButtons();
+        showToast('La sala ya no existe');
+        goHome(true);
+        break;
+
+      case 'room_full':
+        clearLoadingButtons();
+        showToast('La sala está llena');
+        goHome(true);
         break;
 
       case 'max_set':
@@ -147,12 +185,14 @@ export const getClientScript = (joinCode?: string) => `
       case 'counter_challenge':
         selectedNumber = null;
         isChallenger = playerName === gameState.challenger?.name;
+        saveSession();
         updateMaxNumberScreen();
         showScreen('max-number-screen');
         break;
 
       case 'new_challenge':
         selectedNumber = null;
+        saveSession();
         updateMaxNumberScreen();
         showScreen('max-number-screen');
         break;
@@ -535,6 +575,7 @@ export const getClientScript = (joinCode?: string) => `
   }
 
   function exitGame() {
+    clearSession();
     window.location.href = '/';
   }
 
@@ -553,13 +594,65 @@ export const getClientScript = (joinCode?: string) => `
     }
   }
 
-  // Check for direct join link
-  const joinCodeFromUrl = '${joinCode || ''}';
-  if (joinCodeFromUrl) {
-    document.getElementById('room-code-input').value = joinCodeFromUrl;
-    showJoinRoom();
+  // Session management for reconnection
+  function saveSession() {
+    const session = {
+      roomCode: roomCode,
+      playerName: playerName,
+      isChallenger: isChallenger
+    };
+    localStorage.setItem('probabilidades_session', JSON.stringify(session));
+  }
+
+  function loadSession() {
+    const saved = localStorage.getItem('probabilidades_session');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  function clearSession() {
+    localStorage.removeItem('probabilidades_session');
+  }
+
+  function tryReconnect() {
+    const session = loadSession();
+    if (session && session.roomCode && session.playerName) {
+      playerName = session.playerName;
+      roomCode = session.roomCode;
+      isChallenger = session.isChallenger;
+      
+      showToast('Reconectando...');
+      connectWebSocket(roomCode);
+      sendMessage({
+        type: 'reconnect',
+        playerName: playerName,
+        isChallenger: isChallenger
+      });
+      return true;
+    }
+    return false;
   }
 
   // Load saved username on page load
   loadSavedUsername();
+
+  // Check for direct join link
+  const joinCodeFromUrl = '${joinCode || ''}';
+  
+  // Try to reconnect if there's a saved session
+  const savedSession = loadSession();
+  if (savedSession && savedSession.roomCode) {
+    // If we have a session, try to reconnect
+    tryReconnect();
+  } else if (joinCodeFromUrl) {
+    // Otherwise, if there's a join code in URL, show join screen
+    document.getElementById('room-code-input').value = joinCodeFromUrl;
+    showJoinRoom();
+  }
 `

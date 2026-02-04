@@ -100,7 +100,38 @@ export class GameRoom {
       case 'get_state':
         ws.send(JSON.stringify({ type: 'state_update', state: this.gameState }))
         break
+
+      case 'reconnect':
+        this.handleReconnect(ws, data)
+        break
     }
+  }
+
+  private handleReconnect(ws: WebSocket, data: any) {
+    const playerName = data.playerName
+    
+    // Check if room has been initialized
+    if (!this.gameState.roomCode) {
+      ws.send(JSON.stringify({ type: 'room_not_found' }))
+      return
+    }
+
+    // Check if player was in this room
+    const isChallenger = this.gameState.challenger?.name === playerName
+    const isChallenged = this.gameState.challenged?.name === playerName
+
+    if (!isChallenger && !isChallenged) {
+      // Player was not in this room, check if they can join
+      if (this.gameState.challenged) {
+        ws.send(JSON.stringify({ type: 'room_full' }))
+      } else {
+        ws.send(JSON.stringify({ type: 'room_not_found' }))
+      }
+      return
+    }
+
+    // Player was in this room, send current state
+    ws.send(JSON.stringify({ type: 'reconnected', state: this.gameState }))
   }
 
   private handleCreateRoom(data: any) {
@@ -112,13 +143,27 @@ export class GameRoom {
   }
 
   private handleJoinRoom(ws: WebSocket, data: any) {
-    if (this.gameState.challenger && !this.gameState.challenged) {
-      this.gameState.challenged = { name: data.playerName, number: null, ready: false }
-      this.gameState.phase = 'setting_max'
-      this.broadcast({ type: 'player_joined', state: this.gameState })
-    } else {
-      ws.send(JSON.stringify({ type: 'error', message: 'Room is full or not ready' }))
+    // Check if room exists (has a challenger)
+    if (!this.gameState.challenger) {
+      ws.send(JSON.stringify({ type: 'room_not_found' }))
+      return
     }
+
+    // Check if room is full
+    if (this.gameState.challenged) {
+      // Check if it's the same player reconnecting
+      if (this.gameState.challenged.name === data.playerName) {
+        ws.send(JSON.stringify({ type: 'reconnected', state: this.gameState }))
+        return
+      }
+      ws.send(JSON.stringify({ type: 'room_full' }))
+      return
+    }
+
+    // Join the room
+    this.gameState.challenged = { name: data.playerName, number: null, ready: false }
+    this.gameState.phase = 'setting_max'
+    this.broadcast({ type: 'player_joined', state: this.gameState })
   }
 
   private handleSetMaxNumber(data: any) {

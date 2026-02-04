@@ -655,4 +655,15 @@ export const getClientScript = (joinCode?: string) => `
     document.getElementById('room-code-input').value = joinCodeFromUrl;
     showJoinRoom();
   }
+
+  // Handle page visibility change (e.g., returning from share widget on mobile)
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') {
+      const session = loadSession();
+      // If we have a session but WebSocket is closed, reconnect
+      if (session && session.roomCode && (!ws || ws.readyState !== WebSocket.OPEN)) {
+        tryReconnect();
+      }
+    }
+  });
 `

@@ -50,8 +50,8 @@ export const homePage = (joinCode?: string) => html`
           <label>El reto</label>
           <textarea id="challenge-text" placeholder="Ej: Comerse un limón entero" rows="3" maxlength="200"></textarea>
         </div>
-        <button class="btn btn-primary" onclick="createRoom()">
-          Crear Sala
+        <button class="btn btn-primary" id="create-room-btn" onclick="createRoom()">
+          <span class="btn-text">Crear Sala</span>
         </button>
         <button class="btn btn-secondary" onclick="goHome()">
           Volver
@@ -71,8 +71,8 @@ export const homePage = (joinCode?: string) => html`
           <label>Código de sala</label>
           <input type="text" id="room-code-input" placeholder="Ej: ABC123" maxlength="6" style="text-transform: uppercase;">
         </div>
-        <button class="btn btn-primary" onclick="joinRoom()">
-          Unirse
+        <button class="btn btn-primary" id="join-room-btn" onclick="joinRoom()">
+          <span class="btn-text">Unirse</span>
         </button>
         <button class="btn btn-secondary" onclick="goHome()">
           Volver

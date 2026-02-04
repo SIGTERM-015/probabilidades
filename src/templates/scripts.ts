@@ -38,12 +38,38 @@ export const getClientScript = (joinCode?: string) => `
     showScreen('join-screen');
   }
 
+  let pendingMessage = null;
+  let connectingBtn = null;
+
+  function setButtonLoading(btnId, loading) {
+    const btn = document.getElementById(btnId);
+    if (btn) {
+      if (loading) {
+        btn.classList.add('loading');
+      } else {
+        btn.classList.remove('loading');
+      }
+    }
+  }
+
+  function clearLoadingButtons() {
+    if (connectingBtn) {
+      setButtonLoading(connectingBtn, false);
+      connectingBtn = null;
+    }
+  }
+
   function connectWebSocket(code) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(protocol + '//' + window.location.host + '/room/' + code + '/websocket');
     
     ws.onopen = () => {
       console.log('Connected to room:', code);
+      // Send pending message if any
+      if (pendingMessage) {
+        ws.send(JSON.stringify(pendingMessage));
+        pendingMessage = null;
+      }
     };
 
     ws.onmessage = (event) => {
@@ -53,13 +79,24 @@ export const getClientScript = (joinCode?: string) => `
 
     ws.onclose = () => {
       console.log('Disconnected from room');
+      clearLoadingButtons();
     };
 
     ws.onerror = (error) => {
       console.error('WebSocket error:', error);
-      alert('Error de conexión. Intenta de nuevo.');
+      showToast('Error de conexión. Intenta de nuevo.');
+      pendingMessage = null;
+      clearLoadingButtons();
       goHome();
     };
+  }
+
+  function sendMessage(message) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(message));
+    } else {
+      pendingMessage = message;
+    }
   }
 
   function handleServerMessage(data) {
@@ -71,12 +108,14 @@ export const getClientScript = (joinCode?: string) => `
 
     switch (data.type) {
       case 'room_created':
+        clearLoadingButtons();
         showScreen('waiting-screen');
         document.getElementById('display-room-code').textContent = gameState.roomCode;
         document.getElementById('display-challenge').textContent = '"' + gameState.challenge + '"';
         break;
 
       case 'player_joined':
+        clearLoadingButtons();
         updateMaxNumberScreen();
         showScreen('max-number-screen');
         break;
@@ -135,7 +174,7 @@ export const getClientScript = (joinCode?: string) => `
         break;
 
       case 'error':
-        alert(data.message);
+        showToast(data.message);
         break;
     }
   }
@@ -170,12 +209,12 @@ export const getClientScript = (joinCode?: string) => `
       
       if (isCounter && prevMax) {
         maxInput.max = prevMax;
-        maxInput.placeholder = '2 - ' + prevMax;
+        maxInput.placeholder = '3 - ' + prevMax;
         limitWarning.textContent = '⚠️ Máximo permitido: ' + prevMax;
         limitWarning.classList.remove('hidden');
       } else {
         maxInput.max = 100;
-        maxInput.placeholder = 'Ej: 10';
+        maxInput.placeholder = 'Mínimo 3';
         limitWarning.classList.add('hidden');
       }
     }
@@ -287,11 +326,11 @@ export const getClientScript = (joinCode?: string) => `
     const challenge = document.getElementById('challenge-text').value.trim();
     
     if (!name) {
-      alert('Por favor ingresa tu nombre');
+      showToast('Por favor ingresa tu nombre');
       return;
     }
     if (!challenge) {
-      alert('Por favor ingresa el reto');
+      showToast('Por favor ingresa el reto');
       return;
     }
 
@@ -299,16 +338,16 @@ export const getClientScript = (joinCode?: string) => `
     roomCode = generateRoomCode();
     isChallenger = true;
 
-    connectWebSocket(roomCode);
+    connectingBtn = 'create-room-btn';
+    setButtonLoading('create-room-btn', true);
     
-    setTimeout(() => {
-      ws.send(JSON.stringify({
-        type: 'create_room',
-        roomCode: roomCode,
-        challenge: challenge,
-        playerName: playerName
-      }));
-    }, 500);
+    connectWebSocket(roomCode);
+    sendMessage({
+      type: 'create_room',
+      roomCode: roomCode,
+      challenge: challenge,
+      playerName: playerName
+    });
   }
 
   function joinRoom() {
@@ -316,11 +355,11 @@ export const getClientScript = (joinCode?: string) => `
     const code = document.getElementById('room-code-input').value.trim().toUpperCase();
     
     if (!name) {
-      alert('Por favor ingresa tu nombre');
+      showToast('Por favor ingresa tu nombre');
       return;
     }
     if (!code || code.length !== 6) {
-      alert('Por favor ingresa un código de sala válido (6 caracteres)');
+      showToast('Por favor ingresa un código de sala válido (6 caracteres)');
       return;
     }
 
@@ -328,14 +367,14 @@ export const getClientScript = (joinCode?: string) => `
     roomCode = code;
     isChallenger = false;
 
-    connectWebSocket(roomCode);
+    connectingBtn = 'join-room-btn';
+    setButtonLoading('join-room-btn', true);
     
-    setTimeout(() => {
-      ws.send(JSON.stringify({
-        type: 'join_room',
-        playerName: playerName
-      }));
-    }, 500);
+    connectWebSocket(roomCode);
+    sendMessage({
+      type: 'join_room',
+      playerName: playerName
+    });
   }
 
   function setMaxNumber() {
@@ -345,12 +384,12 @@ export const getClientScript = (joinCode?: string) => `
     const maxAllowed = isCounter && prevMax ? prevMax : 100;
     
     if (!maxNum || maxNum < 3) {
-      alert('Por favor ingresa un número mayor o igual a 3');
+      showToast('El número mínimo es 3');
       return;
     }
     
     if (maxNum > maxAllowed) {
-      alert('El número máximo permitido es ' + maxAllowed);
+      showToast('El número máximo permitido es ' + maxAllowed);
       return;
     }
 
@@ -364,8 +403,13 @@ export const getClientScript = (joinCode?: string) => `
     const numberInput = document.getElementById('player-number-input');
     const num = parseInt(numberInput.value);
     
-    if (!num || num < 1 || num > gameState.maxNumber) {
-      alert('Por favor ingresa un número entre 1 y ' + gameState.maxNumber);
+    if (!num || num < 1) {
+      showToast('Por favor ingresa un número válido');
+      return;
+    }
+    
+    if (num > gameState.maxNumber) {
+      showToast('El número debe ser ' + gameState.maxNumber + ' o menos');
       return;
     }
 
@@ -469,7 +513,7 @@ export const getClientScript = (joinCode?: string) => `
     const challenge = document.getElementById('new-challenge-text').value.trim();
     
     if (!challenge) {
-      alert('Por favor ingresa el nuevo reto');
+      showToast('Por favor ingresa el nuevo reto');
       return;
     }
     

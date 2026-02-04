@@ -354,4 +354,33 @@ export const styles = `
   .history-entry.no-match .round-result {
     color: #e94560;
   }
+
+  .btn.loading {
+    opacity: 0.7;
+    pointer-events: none;
+    position: relative;
+  }
+
+  .btn.loading .btn-text {
+    visibility: hidden;
+  }
+
+  .btn.loading::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    top: 50%;
+    left: 50%;
+    margin-left: -10px;
+    margin-top: -10px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
 `
